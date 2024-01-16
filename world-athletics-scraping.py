@@ -63,13 +63,33 @@ def scrape_event(event_url):
         list_of_rows.append(cells)
     
     df = pd.DataFrame(list_of_rows)
-    print(df)
+    # print(df)
     return df
 
 
 def scrape_meet(meet_url):
+
+    def wa_style_to_tfrrs(event_name, sex):
+        if 'Hurdles' in event_name:
+            event_name = event_name[:-14] + 'Hurdles'
+        if 'Steeplechase' in event_name:
+            event_name = event_name[:-19] + 'Steeplechase'
+        if 'Throw' in event_name:
+            event_name = event_name[:-6]
+        if 'Metres' in event_name:
+            event_name = event_name[:-6] + 'Meters' # USA USA USA
+
+        if sex == 'W':
+            event_name = 'Womens-' + event_name
+        else:
+            event_name = 'Mens-' + event_name
+
+        return event_name
+
     page = requests.get(meet_url)
     soup = BeautifulSoup(page.content, 'html.parser')
+
+    meet_name = soup.find('h1').get_text().strip()
 
     tables = soup.find_all('tbody')
     finals = []
@@ -78,23 +98,23 @@ def scrape_meet(meet_url):
 
     for final in finals:
         event_sex = final.parent.find_all('td')[1].get_text().strip() # haha sex
-        event_name = final.parent.find_all('td')[2].get_text().strip().replace(' ', '-').replace(',','')
+        event_name_og = final.parent.find_all('td')[2].get_text().strip().replace(' ', '-').replace(',','')
 
+        tfrrs_style_name = wa_style_to_tfrrs(event_name_og, event_sex)
 
-        event_name = event_name[:-14] + 'Hurdles' if 'Hurdles' in event_name else event_name
-        event_name = event_name[:-19] + 'Steeplechase' if 'Steeplechase' in event_name else event_name
-        event_name = event_name[:-6] if 'Throw' in event_name else event_name
-        americanized_name = event_name[:-6] + 'Meters' if 'Metres' in event_name else event_name # USA USA USA
-
-        tfrrs_style_name = event_sex + ('om' if event_sex == 'W' else '') + 'ens-' + americanized_name
+        
         is_ncaa_event = tfrrs_style_name in EVENT_DICTS.keys()
         
-        if is_ncaa_event: # need to check if it's an event I care about
+        if is_ncaa_event:
             print(tfrrs_style_name)
             results_cell = final.parent.find_all('td')[5]
             results_url = WA_URL + results_cell.find('a', href=True)['href']
             # scrape_event(results_url)
 
+    return meet_name
+
+    # need to do multis separately
+    # look for 1500/800 with round == decathlon/heptathlon
 
 all_champs_url = 'https://worldathletics.org/results/world-athletics-championships'
 
@@ -106,5 +126,5 @@ meet_urls = [i['href'] for i in meetings]
 
 for meet in meet_urls:
     url = WA_URL + meet
-    scrape_meet(url)
+    meet_name = scrape_meet(url)
     break

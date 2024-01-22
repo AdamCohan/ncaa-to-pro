@@ -65,6 +65,7 @@ def scrape_event(event_url):
     df = pd.DataFrame(list_of_rows)
     # print(df)
     return df
+    # here should call a function that adds the df to the global event dfs (similar to how they are for ncaa)
 
 
 def scrape_meet(meet_url):

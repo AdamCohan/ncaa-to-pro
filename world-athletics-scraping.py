@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+import re
 
 # literally copied from tfrrs-scraping.py maybe a better way to do it oh well
 EVENT_DICTS = {
@@ -68,7 +69,9 @@ def add_athlete(d, data, year):
     else:
         d[name] = {yc:[year], fp:[place], fm:[mark], 'country':country}
 
-def scrape_event(event_url, meet_year):
+def scrape_event(event_url, meet_year, is_multi = False):
+    if is_multi:
+        event_url = 'https://worldathletics.org' + event_url
     page = requests.get(event_url)
     soup = BeautifulSoup(page.content, 'html.parser')
 
@@ -80,7 +83,11 @@ def scrape_event(event_url, meet_year):
         list_of_rows.append(cells)
 
     df = pd.DataFrame(list_of_rows)
-    df.rename(columns={0:'Place', 1:'Bib', 2:'Name', 3:'Country', 4:'Mark'}, inplace=True)
+    if is_multi:
+        df.rename(columns={0:'Place', 1:'Name', 2:'Country', 3:'Mark'}, inplace=True)
+        pass
+    else:
+        df.rename(columns={0:'Place', 1:'Bib', 2:'Name', 3:'Country', 4:'Mark'}, inplace=True)
     df['Mark'] = df['Mark'].apply(lambda mark : mark.split()[0])
 
     event_name = soup.find('h1').get_text().strip().split()
@@ -149,11 +156,21 @@ def scrape_meet(meet_url):
             results_url = WA_URL + results_cell.find('a', href=True)['href']
             scrape_event(results_url, meet_year)
 
-    
-    # need to do multis separately
-    # look for 1500/800 with round == decathlon/heptathlon
+    decathlon = []
+    for table in tables:
+        decathlon += table.find_all('td', {'data-er': re.compile('Decathlon')}) # regex lets me include Decathlon Group A for events with flights
 
-    # write all event dicts to new folder of csvs
+    heptathlon = []
+    for table in tables:
+        heptathlon += table.find_all('td', {'data-er': re.compile('Heptathlon')})
+
+    decath_points_url = decathlon[-1].parent.find_all('td')[-1].find('a', href=True)['href']
+    scrape_event(decath_points_url, meet_year, True)
+
+    heptathlon_points_url = heptathlon[-1].parent.find_all('td')[-1].find('a', href=True)['href']
+    if meet_year != '2009': # world athletics bum website doesnt have it listed wtf
+        scrape_event(heptathlon_points_url, meet_year, True)
+
 
 def main():
     all_champs_url = 'https://worldathletics.org/results/world-athletics-championships'
@@ -166,12 +183,18 @@ def main():
 
     for meet in meet_urls:
         url = WA_URL + meet
-        # print(meet)
+        print(meet)
         scrape_meet(url)
-        break
 
-    # scrape_event("https://worldathletics.org/results/world-athletics-championships/2023/world-athletics-championships-budapest-2023-7138987/men/1500-metres/final/result#resultheader")
-
-    print(EVENT_DICTS)
+    for key in EVENT_DICTS:
+        df = pd.DataFrame.from_dict(EVENT_DICTS[key], orient='index')
+        df.to_csv('./wca-results/' + key + '.csv')
 
 main()
+
+# some shit is just broken
+# https://worldathletics.org/results/world-athletics-championships/2009/12th-iaaf-world-championships-in-athletics-6998524/women/heptathlon/800-metres/points
+# literally nothing listed for the womens heptathlon results for 2009
+
+# some issue with the mark in 2007
+# will look tomorrow

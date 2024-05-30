@@ -52,10 +52,10 @@ EVENT_DICTS = {
 WA_URL = 'https://worldathletics.org'
 
 def add_athlete(d, data, year):
-    name = data['Name']
-    place = data['Place']
-    mark = data['Mark']
-    country = data['Country']
+    name = data['ATHLETE']
+    place = data['POS']
+    mark = data['MARK']
+    country = data['COUNTRY']
 
     yc = 'years_competed'
     fp = 'finish_placements'
@@ -82,13 +82,17 @@ def scrape_event(event_url, meet_year, is_multi = False):
         cells = [i.get_text().strip() for i in cells]
         list_of_rows.append(cells)
 
+    header_row = soup.find('thead').find('tr').find_all('th')
+    header_row = [i.get_text().strip() for i in header_row]
+
+    col_rename_dict = {}
+    for i in range(len(header_row)):
+        col_rename_dict[i] = header_row[i]
+
     df = pd.DataFrame(list_of_rows)
-    if is_multi:
-        df.rename(columns={0:'Place', 1:'Name', 2:'Country', 3:'Mark'}, inplace=True)
-        pass
-    else:
-        df.rename(columns={0:'Place', 1:'Bib', 2:'Name', 3:'Country', 4:'Mark'}, inplace=True)
-    df['Mark'] = df['Mark'].apply(lambda mark : mark.split()[0])
+    df.rename(columns=col_rename_dict, inplace=True)
+    df.rename(columns={'Points':'MARK'}, inplace=True) # since multis have 'Points' as the column title
+    df['MARK'] = df['MARK'].apply(lambda mark : mark.split()[0]) # get rid of record tags (WR/NR/WL/etc)
 
     event_name = soup.find('h1').get_text().strip().split()
     event_sex = 'Womens' if event_name[-1] == 'women' else 'Mens' # to append for event dict
@@ -155,7 +159,7 @@ def scrape_meet(meet_url):
             results_cell = final.parent.find_all('td')[5]
             results_url = WA_URL + results_cell.find('a', href=True)['href']
             scrape_event(results_url, meet_year)
-
+  
     decathlon = []
     for table in tables:
         decathlon += table.find_all('td', {'data-er': re.compile('Decathlon')}) # regex lets me include Decathlon Group A for events with flights
@@ -165,12 +169,13 @@ def scrape_meet(meet_url):
         heptathlon += table.find_all('td', {'data-er': re.compile('Heptathlon')})
 
     decath_points_url = decathlon[-1].parent.find_all('td')[-1].find('a', href=True)['href']
-    scrape_event(decath_points_url, meet_year, True)
+    if meet_year not in ['1987', '1983']:
+        scrape_event(decath_points_url, meet_year, True)
 
     heptathlon_points_url = heptathlon[-1].parent.find_all('td')[-1].find('a', href=True)['href']
-    if meet_year != '2009': # world athletics bum website doesnt have it listed wtf
+    if meet_year not in ['2009', '1987', '1983']: # world athletics bum website doesnt have it listed wtf
         scrape_event(heptathlon_points_url, meet_year, True)
-
+    
 
 def main():
     all_champs_url = 'https://worldathletics.org/results/world-athletics-championships'
@@ -184,17 +189,31 @@ def main():
     for meet in meet_urls:
         url = WA_URL + meet
         print(meet)
-        scrape_meet(url)
-
+        if meet != '#': # theres an extra row in the table that I can't find in inspect element that has href="#"
+            scrape_meet(url)
     for key in EVENT_DICTS:
         df = pd.DataFrame.from_dict(EVENT_DICTS[key], orient='index')
         df.to_csv('./wca-results/' + key + '.csv')
+
 
 main()
 
 # some shit is just broken
 # https://worldathletics.org/results/world-athletics-championships/2009/12th-iaaf-world-championships-in-athletics-6998524/women/heptathlon/800-metres/points
 # literally nothing listed for the womens heptathlon results for 2009
+#
+# https://worldathletics.org/results/world-athletics-championships/1987/2nd-iaaf-world-championships-in-athletics-6986221/men/decathlon/1500-metres/points
+# no results for the mens decathlon for 1987 --> also none of the events are even listed in the final results
+# womens multi also missing
+#
+# https://worldathletics.org/results/world-athletics-championships/1983/1st-iaaf-world-championships-in-athletics-6988504/women/heptathlon/800-metres/result#resultheader
+# randomly missing the javelin from the 1983 heptathlon
+# also missing the final points for the hep
+#
+# also missing the mens javelin from 1983
+# and all the points
+# https://worldathletics.org/results/world-athletics-championships/1983/1st-iaaf-world-championships-in-athletics-6988504/men/decathlon/1500-metres/points#resultheader
+
 
 # some issue with the mark in 2007
 # will look tomorrow
